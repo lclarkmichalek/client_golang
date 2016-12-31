@@ -292,17 +292,8 @@ func InstrumentHandlerFuncWithOpts(opts SummaryOpts, handlerFunc func(http.Respo
 
 		delegate := &responseWriterDelegator{ResponseWriter: w}
 		out := computeApproximateRequestSize(r)
+		rw := newResponseWriterDelegator(w, delegate)
 
-		_, cn := w.(http.CloseNotifier)
-		_, fl := w.(http.Flusher)
-		_, hj := w.(http.Hijacker)
-		_, rf := w.(io.ReaderFrom)
-		var rw http.ResponseWriter
-		if cn && fl && hj && rf {
-			rw = &fancyResponseWriterDelegator{delegate}
-		} else {
-			rw = delegate
-		}
 		handlerFunc(rw, r)
 
 		elapsed := float64(time.Since(now)) / float64(time.Microsecond)
@@ -373,28 +364,28 @@ func (r *responseWriterDelegator) Write(b []byte) (int, error) {
 	return n, err
 }
 
-type fancyResponseWriterDelegator struct {
+type httpResponseWriterDelegator struct {
 	*responseWriterDelegator
 }
 
-func (f *fancyResponseWriterDelegator) CloseNotify() <-chan bool {
-	return f.ResponseWriter.(http.CloseNotifier).CloseNotify()
+func (h *httpResponseWriterDelegator) CloseNotify() <-chan bool {
+	return h.ResponseWriter.(http.CloseNotifier).CloseNotify()
 }
 
-func (f *fancyResponseWriterDelegator) Flush() {
-	f.ResponseWriter.(http.Flusher).Flush()
+func (h *httpResponseWriterDelegator) Flush() {
+	h.ResponseWriter.(http.Flusher).Flush()
 }
 
-func (f *fancyResponseWriterDelegator) Hijack() (net.Conn, *bufio.ReadWriter, error) {
-	return f.ResponseWriter.(http.Hijacker).Hijack()
+func (h *httpResponseWriterDelegator) Hijack() (net.Conn, *bufio.ReadWriter, error) {
+	return h.ResponseWriter.(http.Hijacker).Hijack()
 }
 
-func (f *fancyResponseWriterDelegator) ReadFrom(r io.Reader) (int64, error) {
-	if !f.wroteHeader {
-		f.WriteHeader(http.StatusOK)
+func (h *httpResponseWriterDelegator) ReadFrom(r io.Reader) (int64, error) {
+	if !h.wroteHeader {
+		h.WriteHeader(http.StatusOK)
 	}
-	n, err := f.ResponseWriter.(io.ReaderFrom).ReadFrom(r)
-	f.written += n
+	n, err := h.ResponseWriter.(io.ReaderFrom).ReadFrom(r)
+	h.written += n
 	return n, err
 }
 
